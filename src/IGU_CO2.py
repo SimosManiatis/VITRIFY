@@ -48,6 +48,9 @@ MAX_TRUCK_LOAD_KG = 20000.0
 ROUTE_A_MODE = "truck_only"
 ROUTE_B_MODE = "truck_only"
 
+# Installation energy for system routes (kg CO2e per m² of glass installed)
+INSTALL_SYSTEM_KGCO2_PER_M2 = 0.25
+
 DECIMALS = 3
 
 # ============================================================================
@@ -364,7 +367,52 @@ def compute_phase_A(
     }
 
 # ============================================================================
-# FULL CHAIN (kept for later tasks, not invoked in Task 1 main flow)
+# SYSTEM ROUTE – B-LEG TRANSPORT
+# ============================================================================
+
+def compute_system_transport_B(
+    route: RouteConfig,
+    processes: ProcessSettings,
+    stats: Dict[str, float],
+    masses: Dict[str, float],
+) -> Dict[str, float]:
+    if processes.igus_per_stillage > 0:
+        n_stillages_B = ceil(
+            stats["eligible_igus"] / processes.igus_per_stillage
+        )
+    else:
+        n_stillages_B = 0
+
+    stillage_mass_B_kg = n_stillages_B * processes.stillage_mass_empty_kg
+
+    distances = compute_route_distances(route)
+    truck_B_km = distances["truck_B_km"]
+    ferry_B_km = distances["ferry_B_km"]
+
+    if processes.route_B_mode == "truck_only":
+        ferry_B_km = 0.0
+
+    truck_B_km *= route.backhaul_factor
+    ferry_B_km *= route.backhaul_factor
+
+    mass_B_t = (masses["eligible_mass_kg"] + stillage_mass_B_kg) / 1000.0
+
+    transport_B_kgco2 = mass_B_t * (
+        truck_B_km * route.emissionfactor_truck
+        + ferry_B_km * route.emissionfactor_ferry
+    )
+
+    return {
+        "transport_B_kgco2": transport_B_kgco2,
+        "truck_B_km_eff": truck_B_km,
+        "ferry_B_km_eff": ferry_B_km,
+        "mass_B_t": mass_B_t,
+        "n_stillages_B": float(n_stillages_B),
+        "stillage_mass_B_kg": stillage_mass_B_kg,
+    }
+
+# ============================================================================
+# FULL CHAIN (kept for later development; not used in main flow yet)
 # ============================================================================
 
 def compute_full_emissions(batch: BatchInput) -> EmissionBreakdown:
@@ -567,11 +615,11 @@ def prompt_yes_no(label: str, default: bool) -> bool:
         print("Please answer y or n.")
 
 # ============================================================================
-# MAIN (TASK 1: up to first transportation leg)
+# MAIN
 # ============================================================================
 
 if __name__ == "__main__":
-    print("IGU reuse carbon prototype – Phase A (on-site removal and first transport)\n")
+    print("IGU reuse carbon prototype – on-site removal and routing\n")
 
     print("First, provide the key locations.\n")
     origin = prompt_location("project origin (on-site removal)")
@@ -792,7 +840,215 @@ if __name__ == "__main__":
     print(f"  Total IGUs (input)       : {int(stats_A['total_igus'])}")
     print(f"  Eligible IGUs            : {int(stats_A['eligible_igus'])}")
     print(f"  Total IGU area           : {f3(stats_A['total_area_m2'])} m²")
+    print(f"  Eligible IGU area        : {f3(stats_A['eligible_area_m2'])} m²")
     print(f"  Average area per IGU     : {f3(stats_A['average_area_per_igu'])} m²")
     print(f"  Avg mass per IGU         : {f3(masses_A['avg_mass_per_igu_kg'])} kg")
     print(f"  Truck distance A (eff.)  : {f3(phaseA['truck_A_km_eff'])} km")
     print(f"  Mass on truck A          : {f3(phaseA['mass_A_t'])} t\n")
+
+    print("Next, select the processing route after the processor.\n")
+    route_choice = prompt_choice(
+        "Processing route", ["system", "component"], default="system"
+    )
+
+    if route_choice == "component":
+        print("Component route will be detailed in a later step. Calculation ends after Phase A.")
+        raise SystemExit(0)
+
+    processes.process_level = "system"
+
+    system_option = prompt_choice(
+        "System route option", ["reuse", "repurpose"], default="reuse"
+    )
+
+    if system_option == "reuse":
+        processes.system_path = "reuse"  # type: ignore[assignment]
+
+        print("\nSystem route: REUSE selected.\n")
+        print("Overview of the modelled IGU batch:")
+        print(f"  Quantity              : {group.quantity}")
+        print(f"  Dimensions (mm)       : {group.width_mm} x {group.height_mm}")
+        print(f"  Glazing type          : {group.glazing_type}")
+        print(f"  Glass outer / inner   : {group.glass_type_outer} / {group.glass_type_inner}")
+        print(f"  Coating type          : {group.coating_type}")
+        print(f"  Spacer material       : {group.spacer_material}")
+        print(f"  Approx. age (years)   : {group.condition.age_years}")
+        print(f"  Eligible IGUs         : {int(stats_A['eligible_igus'])}")
+        print(f"  Eligible area         : {f3(stats_A['eligible_area_m2'])} m²")
+        print(f"  Breakage rate used    : {processes.breakage_rate_global * 100:.2f}%")
+        print(f"  On-site E_site factor : {processes.e_site_kgco2_per_m2} kg CO2e/m²\n")
+
+        confirm_reuse = prompt_yes_no(
+            "Proceed with system REUSE for this IGU batch?", default=True
+        )
+        if not confirm_reuse:
+            print("System reuse not confirmed. Calculation ends after Phase A.")
+            raise SystemExit(0)
+
+        print("\nProvide the location where the IGUs will be reused.\n")
+        reuse_location = prompt_location("reuse destination (system reuse)")
+        route.reuse = reuse_location
+
+        print("\nUpdated reuse destination:")
+        print(f"  Reuse location: {reuse_location.lat:.6f}, {reuse_location.lon:.6f}\n")
+
+        processes.route_B_mode = ROUTE_B_MODE  # keep default
+
+        system_B = compute_system_transport_B(route, processes, stats_A, masses_A)
+
+        print("=== System route – transport to reuse destination (B-leg) ===")
+        print(f"  Truck distance B (eff.) : {f3(system_B['truck_B_km_eff'])} km")
+        print(f"  Mass on truck B         : {f3(system_B['mass_B_t'])} t")
+        print(f"  Transport B             : {f3(system_B['transport_B_kgco2'])} kg CO2e")
+        print(f"  Stillages B (count)     : {int(system_B['n_stillages_B'])}")
+        print(f"  Stillage mass B         : {f3(system_B['stillage_mass_B_kg'])} kg\n")
+
+        install_factor = INSTALL_SYSTEM_KGCO2_PER_M2
+        install_str = input(
+            f"Installation factor E_install (kg CO2e/m² of glass installed) "
+            f"(press Enter for {INSTALL_SYSTEM_KGCO2_PER_M2}): "
+        ).strip()
+        if install_str:
+            try:
+                install_factor = float(install_str)
+            except ValueError:
+                print("Invalid E_install value, keeping default.")
+
+        install_kgco2 = stats_A["eligible_area_m2"] * install_factor
+
+        print(
+            f"\nEstimated emissions for installation of IGUs into the new frame: "
+            f"{f3(install_kgco2)} kg CO2e"
+        )
+
+        total_system_reuse_kgco2 = (
+            phaseA["dismantling_kgco2"]
+            + phaseA["packaging_kgco2"]
+            + phaseA["transport_A_kgco2"]
+            + system_B["transport_B_kgco2"]
+            + install_kgco2
+        )
+
+        print("\n=== Combined results – System REUSE pathway ===")
+        print(f"  On-site dismantling : {f3(phaseA['dismantling_kgco2'])} kg CO2e")
+        print(f"  Packaging           : {f3(phaseA['packaging_kgco2'])} kg CO2e")
+        print(f"  Transport A         : {f3(phaseA['transport_A_kgco2'])} kg CO2e")
+        print(f"  Transport B (reuse) : {f3(system_B['transport_B_kgco2'])} kg CO2e")
+        print(f"  Installation        : {f3(install_kgco2)} kg CO2e")
+        print(f"  Total (system reuse): {f3(total_system_reuse_kgco2)} kg CO2e\n")
+
+    else:  # system_option == "repurpose"
+        processes.system_path = "repurpose"  # type: ignore[assignment]
+
+        print("\nSystem route: REPURPOSE selected.\n")
+        print("Overview of the modelled IGU batch for repurposing:")
+        print(f"  Quantity              : {group.quantity}")
+        print(f"  Dimensions (mm)       : {group.width_mm} x {group.height_mm}")
+        print(f"  Glazing type          : {group.glazing_type}")
+        print(f"  Glass outer / inner   : {group.glass_type_outer} / {group.glass_type_inner}")
+        print(f"  Coating type          : {group.coating_type}")
+        print(f"  Spacer material       : {group.spacer_material}")
+        print(f"  Approx. age (years)   : {group.condition.age_years}")
+        print(f"  Eligible IGUs         : {int(stats_A['eligible_igus'])}")
+        print(f"  Eligible area         : {f3(stats_A['eligible_area_m2'])} m²\n")
+
+        confirm_repurpose = prompt_yes_no(
+            "Proceed with system REPURPOSE for this IGU batch?", default=True
+        )
+        if not confirm_repurpose:
+            print("System repurpose not confirmed. Calculation ends after Phase A.")
+            raise SystemExit(0)
+
+        re_adapt = prompt_yes_no(
+            "Is re-adaptation required (cutting, drilling, tempering, etc.)?",
+            default=True,
+        )
+
+        repurpose_kgco2 = 0.0
+        repurpose_intensity = "none"
+
+        if re_adapt:
+            print("\nSelect repurposing intensity preset (kg CO2e per m² of glass processed):")
+            print("  light  = low-intervention (cleaning, minor repairs, fittings)")
+            print("  medium = moderate rework (cutting, edge finishing, some drilling)")
+            print("  heavy  = intensive rework (e.g. tempering, fritting, major adaptation)")
+
+            repurpose_preset_str = prompt_choice(
+                "Repurposing intensity", ["light", "medium", "heavy"], default="medium"
+            )
+
+            if repurpose_preset_str == "light":
+                processes.repurpose_kgco2_per_m2 = REPURPOSE_LIGHT_KGCO2_PER_M2
+            elif repurpose_preset_str == "medium":
+                processes.repurpose_kgco2_per_m2 = REPURPOSE_MEDIUM_KGCO2_PER_M2
+            elif repurpose_preset_str == "heavy":
+                processes.repurpose_kgco2_per_m2 = REPURPOSE_HEAVY_KGCO2_PER_M2
+
+            processes.repurpose_preset = repurpose_preset_str  # type: ignore[assignment]
+            repurpose_intensity = repurpose_preset_str
+
+            repurpose_kgco2 = (
+                stats_A["eligible_area_m2"] * processes.repurpose_kgco2_per_m2
+            )
+
+            print(
+                f"\nEstimated repurposing emissions "
+                f"({repurpose_intensity}, {processes.repurpose_kgco2_per_m2} kg CO2e/m²): "
+                f"{f3(repurpose_kgco2)} kg CO2e"
+            )
+        else:
+            print("\nNo re-adaptation selected. Repurposing process emissions set to 0 kg CO2e.")
+
+        print("\nProvide the location where the repurposed IGU system will be installed.\n")
+        repurpose_location = prompt_location("repurposed system destination")
+        route.reuse = repurpose_location
+
+        print("\nUpdated repurposed destination:")
+        print(f"  Repurpose location: {repurpose_location.lat:.6f}, {repurpose_location.lon:.6f}\n")
+
+        processes.route_B_mode = ROUTE_B_MODE  # keep default
+
+        system_B = compute_system_transport_B(route, processes, stats_A, masses_A)
+
+        print("=== System route – transport to repurposed destination (B-leg) ===")
+        print(f"  Truck distance B (eff.) : {f3(system_B['truck_B_km_eff'])} km")
+        print(f"  Mass on truck B         : {f3(system_B['mass_B_t'])} t")
+        print(f"  Transport B             : {f3(system_B['transport_B_kgco2'])} kg CO2e")
+        print(f"  Stillages B (count)     : {int(system_B['n_stillages_B'])}")
+        print(f"  Stillage mass B         : {f3(system_B['stillage_mass_B_kg'])} kg\n")
+
+        install_factor = INSTALL_SYSTEM_KGCO2_PER_M2
+        install_str = input(
+            f"Installation factor E_install (kg CO2e/m² of glass installed) "
+            f"(press Enter for {INSTALL_SYSTEM_KGCO2_PER_M2}): "
+        ).strip()
+        if install_str:
+            try:
+                install_factor = float(install_str)
+            except ValueError:
+                print("Invalid E_install value, keeping default.")
+
+        install_kgco2 = stats_A["eligible_area_m2"] * install_factor
+
+        print(
+            f"\nEstimated emissions for installation of the repurposed IGU system: "
+            f"{f3(install_kgco2)} kg CO2e"
+        )
+
+        total_system_repurpose_kgco2 = (
+            phaseA["dismantling_kgco2"]
+            + phaseA["packaging_kgco2"]
+            + phaseA["transport_A_kgco2"]
+            + repurpose_kgco2
+            + system_B["transport_B_kgco2"]
+            + install_kgco2
+        )
+
+        print("\n=== Combined results – System REPURPOSE pathway ===")
+        print(f"  On-site dismantling : {f3(phaseA['dismantling_kgco2'])} kg CO2e")
+        print(f"  Packaging           : {f3(phaseA['packaging_kgco2'])} kg CO2e")
+        print(f"  Transport A         : {f3(phaseA['transport_A_kgco2'])} kg CO2e")
+        print(f"  Repurposing         : {f3(repurpose_kgco2)} kg CO2e")
+        print(f"  Transport B         : {f3(system_B['transport_B_kgco2'])} kg CO2e")
+        print(f"  Installation        : {f3(install_kgco2)} kg CO2e")
+        print(f"  Total (system repurpose): {f3(total_system_repurpose_kgco2)} kg CO2e\n")
