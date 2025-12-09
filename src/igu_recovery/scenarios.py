@@ -5,7 +5,7 @@ from typing import Dict, Tuple
 from .constants import (
     DISASSEMBLY_KGCO2_PER_M2,
     REPURPOSE_LIGHT_KGCO2_PER_M2, REPURPOSE_MEDIUM_KGCO2_PER_M2, REPURPOSE_HEAVY_KGCO2_PER_M2,
-    INSTALL_SYSTEM_KGCO2_PER_M2
+    INSTALL_SYSTEM_KGCO2_PER_M2, REPAIR_KGCO2_PER_M2
 )
 from .models import (
     ProcessSettings, TransportModeConfig, IGUGroup, FlowState, ScenarioResult, Location
@@ -66,6 +66,9 @@ def run_scenario_system_reuse(
         # Yield loss 20%
         logger.info("Applying 20% yield loss for repair process.")
         flow_post_repair = apply_yield_loss(flow_post_removal, 0.20)
+        
+        # Calculate repair emissions on the remaining area 
+        repair_kgco2 = flow_post_repair.area_m2 * REPAIR_KGCO2_PER_M2
     
     # c) New recipient location
     reuse_location = prompt_location("new recipient building / reuse destination")
@@ -152,7 +155,8 @@ def run_scenario_component_reuse(
     flow_post_disassembly = apply_yield_loss(flow_post_removal, DISASSEMBLY_YIELD)
     
     # Disassembly Emissions
-    disassembly_kgco2 = flow_post_removal.area_m2 * DISASSEMBLY_KGCO2_PER_M2
+    # FIX: Use flow_post_disassembly (post-yield) area, not pre-yield flow_post_removal
+    disassembly_kgco2 = flow_post_disassembly.area_m2 * DISASSEMBLY_KGCO2_PER_M2
     
     # d) Recondition
     recondition = prompt_yes_no("Is recondition of components required?", default=True)
@@ -245,7 +249,8 @@ def run_scenario_component_repurpose(
     logger.info("Applying 10% yield loss for disassembly (repurpose).")
     DISASSEMBLY_YIELD = 0.10
     flow_post_disassembly = apply_yield_loss(flow_post_removal, DISASSEMBLY_YIELD)
-    disassembly_kgco2 = flow_post_removal.area_m2 * DISASSEMBLY_KGCO2_PER_M2
+    # FIX: Use flow_post_disassembly (post-yield) area
+    disassembly_kgco2 = flow_post_disassembly.area_m2 * DISASSEMBLY_KGCO2_PER_M2
     
     # e) Repurpose Intensity
     logger.info("Select repurposing intensity:")
@@ -444,6 +449,11 @@ def run_scenario_open_loop_recycling(
     model_transport = prompt_yes_no("Model transport to glasswool/container plants?", default=False)
     open_loop_transport_kgco2 = 0.0
     
+    # Calculate Transport B (to Processor/Aggregator if any leg exists before splitting?)
+    # In this logic, we assume 'Transport A' brings it to a processor, and 'Open Loop Transport' is effectively the 'Transport B' legs to final recyclers.
+    # However, if there was a separate Transport B step to a central cullet plant before splitting, it's missing here.
+    # The existing code treats "Open Loop Transport" as the secondary leg.
+    
     if model_transport:
         gw_plant = prompt_location("Glasswool plant")
         cont_plant = prompt_location("Container glass plant")
@@ -453,13 +463,33 @@ def run_scenario_open_loop_recycling(
         tr_gw = TransportModeConfig(origin=transport.processor, processor=transport.processor, reuse=gw_plant)
         dist_gw = compute_route_distances(tr_gw)
         mass_gw_t = (flow_step2.mass_kg * CULLET_CW_SHARE) / 1000.0
-        e_gw = mass_gw_t * (dist_gw["truck_B_km"] * transport.emissionfactor_truck) # Assume truck only
+        
+        # FIX: Include potential ferry if relevant logic allows, though tr_gw defaults to generic. 
+        # But wait, compute_route_distances relies on processes mode or defaults? 
+        # Actually compute_route_distances looks at transport locations.
+        # We need to know the MODE for these legs. The code here assumes truck only in the original.
+        # Use simpler fix: add ferry capability if we assume route_B_mode applies to these legs.
+        
+        ferry_gw_km = 0.0
+        if processes.route_B_mode == "HGV lorry+ferry":
+             # We need to manually invoke distance calculation that splits ferry?
+             # compute_route_distances returns a dict with keys. 
+             # Let's check what it returns: 'truck_A_km', 'ferry_A_km', 'truck_B_km', 'ferry_B_km'.
+             # Since we passed reuse=gw_plant, it will calculate the 'B' leg distances.
+             ferry_gw_km = dist_gw["ferry_B_km"]
+        
+        e_gw = mass_gw_t * (dist_gw["truck_B_km"] * transport.emissionfactor_truck + ferry_gw_km * transport.emissionfactor_ferry)
         
         # Container
         tr_cont = TransportModeConfig(origin=transport.processor, processor=transport.processor, reuse=cont_plant)
         dist_cont = compute_route_distances(tr_cont)
         mass_cont_t = (flow_step2.mass_kg * CULLET_CONT_SHARE) / 1000.0
-        e_cont = mass_cont_t * (dist_cont["truck_B_km"] * transport.emissionfactor_truck)
+        
+        ferry_cont_km = 0.0
+        if processes.route_B_mode == "HGV lorry+ferry":
+            ferry_cont_km = dist_cont["ferry_B_km"]
+            
+        e_cont = mass_cont_t * (dist_cont["truck_B_km"] * transport.emissionfactor_truck + ferry_cont_km * transport.emissionfactor_ferry)
         
         open_loop_transport_kgco2 = e_gw + e_cont
 

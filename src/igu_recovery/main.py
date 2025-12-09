@@ -71,26 +71,26 @@ def main():
     processes.route_B_mode = route_B_mode_str  # type: ignore[assignment]
     
     # Truck settings
-    logger.info("\nSelect HGV lorry emission factor preset:")
-    logger.info("  eu_legacy    = 0.06 kgCO2e/tkm  (older diesel HGV lorries)")
-    logger.info("  eu_current   = 0.04 kgCO2e/tkm  (current EU average HGV lorry)")
-    logger.info("  best_diesel  = 0.03 kgCO2e/tkm  (best-in-class diesel HGV lorry)")
-    logger.info("  ze_truck     = 0.0075 kgCO2e/tkm (electric HGV lorry, grid mix)")
+    logger.info("\nSelect HGV lorry emission factor preset (DEFRA 2024 / Industry benchmarks):")
+    logger.info("  defra_2024   = 0.098 kgCO2e/tkm (Artic >33t, Avg Laden) [DEFAULT]")
+    logger.info("  legacy_rigid = 0.175 kgCO2e/tkm (Rigid >7.5t, Avg Laden)")
+    logger.info("  best_diesel  = 0.080 kgCO2e/tkm (Modern efficient fleet)")
+    logger.info("  ze_truck     = 0.024 kgCO2e/tkm (Electric, UK Grid 2023)")
     
     truck_preset = prompt_choice(
         "HGV lorry emission preset",
-        ["eu_legacy", "eu_current", "best_diesel", "ze_truck"],
-        default="eu_current",
+        ["defra_2024", "legacy_rigid", "best_diesel", "ze_truck"],
+        default="defra_2024",
     )
     
-    if truck_preset == "eu_legacy":
-        transport.emissionfactor_truck = 0.06
-    elif truck_preset == "eu_current":
-        transport.emissionfactor_truck = 0.04
+    if truck_preset == "defra_2024":
+        transport.emissionfactor_truck = 0.098
+    elif truck_preset == "legacy_rigid":
+        transport.emissionfactor_truck = 0.175
     elif truck_preset == "best_diesel":
-        transport.emissionfactor_truck = 0.03
+        transport.emissionfactor_truck = 0.080
     elif truck_preset == "ze_truck":
-        transport.emissionfactor_truck = 0.0075
+        transport.emissionfactor_truck = 0.024
     
     logger.info(f"  -> Using truck factor: {transport.emissionfactor_truck} kgCO2e/tkm")
     

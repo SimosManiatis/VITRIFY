@@ -17,6 +17,9 @@ REPURPOSE_LIGHT_KGCO2_PER_M2 = 0.5
 REPURPOSE_MEDIUM_KGCO2_PER_M2 = 1.0
 REPURPOSE_HEAVY_KGCO2_PER_M2 = 2.0
 
+# Repair (System Reuse) - e.g. resealing, valve replacement, cleaning
+REPAIR_KGCO2_PER_M2 = 0.5
+
 STILLAGE_MANUFACTURE_KGCO2 = 500.0
 STILLAGE_LIFETIME_CYCLES = 100
 INCLUDE_STILLAGE_EMBODIED = False
@@ -25,8 +28,9 @@ INCLUDE_STILLAGE_EMBODIED = False
 # These are GWP (CO2-equivalent) intensities, where:
 # - "tonne" is the transported payload mass (IGUs + stillages) in metric tonnes
 # - "km" is the distance travelled between the relevant locations (origin/processor/reuse)
-EMISSIONFACTOR_TRUCK = 0.04   # kgCO2e/tkm (HGV lorry)
-EMISSIONFACTOR_FERRY = 0.045  # kgCO2e/tkm (ferry)
+# Updated to align with DEFRA 2024 Factors (Average Laden HGV / Ro-Ro Freight Ferry)
+EMISSIONFACTOR_TRUCK = 0.098   # kgCO2e/tkm (HGV lorry, avg laden)
+EMISSIONFACTOR_FERRY = 0.129   # kgCO2e/tkm (Ro-Ro ferry freight)
 
 BACKHAUL_FACTOR = 1.3
 
