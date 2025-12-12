@@ -51,32 +51,41 @@ def configure_route(name: str, origin: Location, destination: Location, interact
     ferry_detected_msg = ""
     default_mode = "HGV lorry"
     
+    ferry_detected_msg = ""
+    default_mode = "HGV lorry"
+    
     if osrm_km:
         est_road_km = int(osrm_km)
         dist_label = f"OSM Driving Distance: {osrm_km:.1f} km"
         if has_ferry:
-            ferry_detected_msg = " [!] OSRM detected a ferry crossing."
+            ferry_detected_msg = f" {C_HEADER}[!] OSRM detected a ferry crossing.{C_RESET}"
             default_mode = "HGV lorry+ferry"
+        else:
+            ferry_detected_msg = " (No ferry detected)"
     else:
         # Fallback
         est_road_km = int(dist_air * 1.3)
         dist_label = f"Estimated Road Distance (Air x 1.3): ~{est_road_km} km"
     
-    if not interactive:
-        # Default fallback for non-interactive (Batch mode)
-        final_km = osrm_km if osrm_km else float(est_road_km)
-        # If ferry detected in batch mode, we ideally should use ferry mode?
-        # But our batch default config assumes Truck usually. 
-        # If OSRM says ferry, RouteConfig needs split? 
-        # For simple batch, let's keep it simple or enable ferry if detected?
-        mode_batch = "HGV lorry+ferry" if has_ferry else "HGV lorry"
-        return RouteConfig(mode=mode_batch, truck_km=final_km, ferry_km=0.0) # 0.0 ferry km in batch unless we estimate
-
     print(f"\n--- Configuring Route: {name} ---")
     print(f"  Origin: {origin.lat:.4f}, {origin.lon:.4f}")
     print(f"  Destination: {destination.lat:.4f}, {destination.lon:.4f}")
     print(f"  {dist_label}{ferry_detected_msg}")
-    
+
+    if not interactive:
+        # Default fallback for non-interactive (Batch mode)
+        final_km = osrm_km if osrm_km else float(est_road_km)
+        
+        if has_ferry:
+            # Auto-configure ferry split for batch mode
+            # Assume 50km ferry default if detected
+            ferry_km_batch = 50.0
+            truck_km_batch = max(0.0, final_km - ferry_km_batch)
+            print(f"  -> Batch Mode: Auto-configuring {default_mode} (assumed 50km ferry).")
+            return RouteConfig(mode="HGV lorry+ferry", truck_km=truck_km_batch, ferry_km=ferry_km_batch)
+        else:
+            return RouteConfig(mode="HGV lorry", truck_km=final_km, ferry_km=0.0)
+
     mode = prompt_choice(f"Transport Mode for {name}", ["HGV lorry", "HGV lorry+ferry"], default=default_mode)
     
     truck_km = 0.0
@@ -286,25 +295,60 @@ def run_automated_analysis(processes: ProcessSettings):
                         "Total Emissions (kgCO2e)": res.total_emissions_kgco2,
                         "Final Yield (%)": res.yield_percent,
                         "Final Mass (kg)": res.final_mass_kg,
-                        "Intensity (kgCO2e/m2 output)": (res.total_emissions_kgco2 / res.final_area_m2) if res.final_area_m2 > 0 else 0
+                        "Intensity (kgCO2e/m2 output)": (res.total_emissions_kgco2 / res.final_area_m2) if res.final_area_m2 > 0 else 0,
+                        # Route Metadata
+                        "Origin": f"{transport.origin.lat},{transport.origin.lon}",
+                        "Processor": f"{transport.processor.lat},{transport.processor.lon}",
+                        "Route A Mode": processes.route_configs.get("origin_to_processor", RouteConfig(mode="N/A")).mode,
+                        "Route A Dist (km)": processes.route_configs.get("origin_to_processor", RouteConfig(mode="N/A")).truck_km + processes.route_configs.get("origin_to_processor", RouteConfig(mode="N/A")).ferry_km,
+                         # Note: Route B varies by scenario, could be reuse or recycling.
+                         # We can try to capture specific route info if relevant, but for summary maybe just Route A is critical common factor?
+                         # Or simpler: Just breakdown emissions.
                     }
+                    
+                    # Explode by_stage dictionary into columns
+                    if res.by_stage:
+                        for stage, val in res.by_stage.items():
+                            entry[f"Emissions_{stage}"] = val
+                            
                     results.append(entry)
                     product_results.append(entry)
                 
             except Exception as e:
                 logger.error(f"Error processing {product_name} - {sc_name}: {e}")
                 
-        # Individual report generation removed per user request
-
-                
     # 4. Save Report
+    if not results:
+        print("No results to save.")
+        return
+
     report_df = pd.DataFrame(results)
     
+    # Organize columns
+    # Base columns
+    base_cols = [
+        "Product Group", "Product Name", "Scenario", 
+        "Total Emissions (kgCO2e)", "Final Yield (%)", "Final Mass (kg)", "Intensity (kgCO2e/m2 output)",
+        "Origin", "Processor", "Route A Mode", "Route A Dist (km)"
+    ]
+    
+    # Dynamic columns (Emission breakdown)
+    # Filter for columns starting with "Emissions_"
+    emission_cols = [c for c in report_df.columns if c.startswith("Emissions_")]
+    # Sort them for consistency? or keep order?
+    emission_cols.sort()
+    
+    # Final order
+    final_cols = base_cols + emission_cols
+    # Ensure all exist (some might not if dict extraction failed?)
+    final_cols = [c for c in final_cols if c in report_df.columns]
+    
+    report_df = report_df[final_cols]
+    
     # Round numerical columns to 3 decimal places
-    cols_to_round = ["Total Emissions (kgCO2e)", "Final Yield (%)", "Final Mass (kg)", "Intensity (kgCO2e/m2 output)"]
-    for col in cols_to_round:
-        if col in report_df.columns:
-            report_df[col] = report_df[col].round(3)
+    # Apply to all except text
+    numeric_cols = report_df.select_dtypes(include=['float', 'int']).columns
+    report_df[numeric_cols] = report_df[numeric_cols].round(3)
 
     out_file = "d:\\VITRIFY\\automated_analysis_report.csv"
     report_df.to_csv(out_file, index=False)
@@ -312,6 +356,7 @@ def run_automated_analysis(processes: ProcessSettings):
     print_header("Analysis Complete")
     print(f"Report saved to: {out_file}")
     if not report_df.empty:
+        # Show breakdown of mean total emissions by scenario
         print(report_df.groupby("Scenario")[["Total Emissions (kgCO2e)", "Final Yield (%)"]].mean())
 
 

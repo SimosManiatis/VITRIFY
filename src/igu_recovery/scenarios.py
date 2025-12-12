@@ -697,6 +697,13 @@ def run_scenario_open_loop_recycling(
     total = dismantling_kgco2 + breaking_kgco2 + transport_A_kgco2 + open_loop_transport_kgco2
     
     # Waste Transport
+    # Calculate final flow before waste calc
+    final_useful_fraction = CULLET_CW_SHARE + CULLET_CONT_SHARE # 20%
+    flow_final = apply_yield_loss(flow_step2, 1.0 - final_useful_fraction)
+
+    total = dismantling_kgco2 + breaking_kgco2 + transport_A_kgco2 + open_loop_transport_kgco2
+    
+    # Waste Transport
     waste_transport_kgco2 = 0.0
     if transport.landfill:
          # 1. Removal Yield Loss (Origin)
@@ -711,6 +718,8 @@ def run_scenario_open_loop_recycling(
              waste_transport_kgco2 += calc_landfill_transport(mass_loss_break, transport.processor, transport.landfill, transport)
              
          # 3. Useful Fraction Loss (Processor)
+         # flow_step2 is mass entering processor (after break)
+         # flow_final is mass successfully recycled
          mass_loss_final = flow_step2.mass_kg - flow_final.mass_kg
          waste_transport_kgco2 += calc_landfill_transport(mass_loss_final, transport.processor, transport.landfill, transport)
 
@@ -723,9 +732,6 @@ def run_scenario_open_loop_recycling(
         "Open-Loop Transport": open_loop_transport_kgco2,
         "Landfill Transport (Waste)": waste_transport_kgco2
     }
-    
-    final_useful_fraction = CULLET_CW_SHARE + CULLET_CONT_SHARE # 20%
-    flow_final = apply_yield_loss(flow_step2, 1.0 - final_useful_fraction)
     
     return ScenarioResult(
         scenario_name="Open-Loop Recycling",
