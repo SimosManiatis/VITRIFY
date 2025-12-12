@@ -93,7 +93,7 @@ def run_scenario_landfill(
     
     by_stage = {
         "Dismantling": dismantling_kgco2,
-        "Transport to Landfill": landfill_kgco2
+        "Landfill Transport (Waste)": landfill_kgco2
     }
     
     return ScenarioResult(
@@ -202,7 +202,7 @@ def run_scenario_system_reuse(
     
     by_stage = {
         "Dismantling (E_site)": dismantling_kgco2,
-        "Packaging (Stillages)": packaging_kgco2,
+        "Packaging": packaging_kgco2,
         "Transport A": transport_A_kgco2,
         "Repair": repair_kgco2,
         "Transport B": transport_B_kgco2,
@@ -484,7 +484,8 @@ def run_scenario_closed_loop_recycling(
     transport: TransportModeConfig,
     group: IGUGroup,
     flow_start: FlowState,
-    interactive: bool = True
+    interactive: bool = True,
+    send_intact: bool = None
 ) -> ScenarioResult:
     """
     Scenario (d): Closed-loop Recycling
@@ -494,9 +495,10 @@ def run_scenario_closed_loop_recycling(
         print_header("Scenario (d): Closed-loop Recycling")
     
     # a) Intact decision
-    send_intact = True
     if interactive:
         send_intact = prompt_yes_no("Send IGUs intact to processor?", default=True)
+    elif send_intact is None:
+        send_intact = True
     
     # b/c) On-site removal + Break IGU
     yield_removal = 0.0
@@ -611,7 +613,8 @@ def run_scenario_open_loop_recycling(
     transport: TransportModeConfig,
     group: IGUGroup,
     flow_start: FlowState,
-    interactive: bool = True
+    interactive: bool = True,
+    send_intact: bool = None
 ) -> ScenarioResult:
     """
     Scenario (e): Open-loop Recycling
@@ -621,9 +624,10 @@ def run_scenario_open_loop_recycling(
         print_header("Scenario (e): Open-loop Recycling")
     
     # a) Intact vs break
-    send_intact = True
     if interactive:
         send_intact = prompt_yes_no("Send IGUs intact to processor?", default=True)
+    elif send_intact is None:
+        send_intact = True
     
     # yield
     yield_removal = 0.0
