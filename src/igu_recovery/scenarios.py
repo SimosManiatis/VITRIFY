@@ -662,29 +662,15 @@ def run_scenario_open_loop_recycling(
     model_transport = False
     if interactive:
         model_transport = prompt_yes_no("Model transport to glasswool/container plants?", default=False)
+    else:
+        # In batch mode, always model transport, using generic recycling route as proxy
+        model_transport = True
     
     open_loop_transport_kgco2 = 0.0
     
-    if model_transport and interactive:
-        gw_plant = prompt_location("Glasswool plant")
-        cont_plant = prompt_location("Container glass plant")
-        
-        open_loop_transport_kgco2 = 0.0
-        # NOTE: Open loop often not fully modelled for specific B-leg distances in this prototype unless interactive.
-        # If we wanted to use route configs, we'd need prompts for "processor_to_glasswool" etc.
-        # Leaving as 0 if not interactive for now, or using generic "processor_to_recycling".
-        # If interactive, user prompted for locations but route config wasn't prompted.
-        # The previous code calculated distances on the fly.
-        # To maintain functionality, we might need a fallback or prompt for these specific routes.
-        # For this refactor, let's skip complex open-loop sub-routes or fallback to 'processor_to_recycling'.
-        
-        # Let's use 'processor_to_recycling' as a proxy for the generic recycling path
-        # Assuming open loop goes to similar distance? Or calc fresh?
-        # Reverting to simple on-the-fly calc for Open Loop sub-streams might be safer as they vary.
-        # But we removed compute_route_distances.
-        
-        # We will assume Open Loop uses "processor_to_recycling" config for simplicity in this refactor.
-        # Weighted by share.
+    if model_transport:
+        # If interactive, user implied specific plants but we might fallback to generic config if not fully prompted.
+        # In batch, we definitely rely on "processor_to_recycling".
         
         mass_gw_kg = (flow_step2.mass_kg * CULLET_CW_SHARE)
         mass_cont_kg = (flow_step2.mass_kg * CULLET_CONT_SHARE)
