@@ -528,8 +528,12 @@ def main():
         if 'result' in locals() and result:
             vis = Visualizer(mode="single_run")
             p_name = group.glazing_type
+            # Generate waterfall, donut, and tornado for this result
+            vis.plot_waterfall(result, product_name=f"Manual Config: {p_name}")
+            vis.plot_donut_stages(result, product_name=f"Manual Config: {p_name}")
+            vis.plot_tornado_sensitivity(result, product_name=f"Manual Config: {p_name}")
             vis.plot_single_scenario_breakdown(result, product_name=f"Manual Config: {p_name}")
-            # print(f"Plot saved to: {vis.session_dir}")
+            print(f"\nPlots saved to: {vis.session_dir}")
         else:
             print("No result to visualize.")
             
@@ -601,10 +605,10 @@ def main():
              print(f"{r.scenario_name:<25} | {r.total_emissions_kgco2:<20.2f} | {r.yield_percent:<10.1f}")
         print("-" * 80)
         
-        # Plot
+        # Plot - Generate ALL comparison visualizations
         vis = Visualizer(mode="single_run")
         p_name = group.glazing_type
-        vis.plot_scenario_comparison(comparison_results, product_name=f"Manual Config: {p_name}")
+        vis.generate_all_single_run_plots(comparison_results, product_name=f"Manual Config: {p_name}")
 
 if __name__ == "__main__":
     main()
