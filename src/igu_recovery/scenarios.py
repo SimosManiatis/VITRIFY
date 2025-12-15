@@ -526,15 +526,26 @@ def run_scenario_closed_loop_recycling(
     
     # e) Processor fractions
     CULLET_FLOAT_SHARE = SHARE_CULLET_FLOAT
+    
+    # Laminated Glass Logic:
+    # If laminated (e.g. 44.2), it cannot be easily recycled into float.
+    # Check glass types.
+    is_laminated = False
+    if "laminated" in group.glass_type_outer.lower() or "laminated" in group.glass_type_inner.lower():
+        is_laminated = True
+    
+    # Also check thickness (e.g. 44.2 implies 8.something mm, we rely on type string)
+    # The database loader should populate glass_type_outer/inner with "laminated" if applicable
+    # If product name contains "44.2", we assume laminated.
+    # Group names often don't travel here, but let's trust the type.
+    
+    if is_laminated:
+        logger.warning(f"Laminated glass detected! Reducing Closed-loop yield to 0%.")
+        CULLET_FLOAT_SHARE = 0.0
+
     flow_float = apply_yield_loss(flow_step2, 1.0 - CULLET_FLOAT_SHARE)
     
     # f) Dispatch to float plant
-    if interactive:
-        float_plant = prompt_location("Second Use Processing Facility (float glass plant)")
-        transport.reuse = float_plant
-    # Else assumes transport.reuse set (e.g. to a global recycling center)
-    
-    # f) Dispatch to float plant (Processor -> Recycling)
     if interactive:
         float_plant = prompt_location("Second Use Processing Facility (float glass plant)")
         transport.reuse = float_plant
@@ -678,12 +689,9 @@ def run_scenario_open_loop_recycling(
 
     total = dismantling_kgco2 + breaking_kgco2 + transport_A_kgco2 + open_loop_transport_kgco2
     
-    # Waste Transport
     # Calculate final flow before waste calc
     final_useful_fraction = CULLET_CW_SHARE + CULLET_CONT_SHARE # 20%
     flow_final = apply_yield_loss(flow_step2, 1.0 - final_useful_fraction)
-
-    total = dismantling_kgco2 + breaking_kgco2 + transport_A_kgco2 + open_loop_transport_kgco2
     
     # Waste Transport
     waste_transport_kgco2 = 0.0

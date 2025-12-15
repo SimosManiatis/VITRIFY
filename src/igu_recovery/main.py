@@ -27,12 +27,11 @@ from .scenarios import (
     run_scenario_component_reuse,
     run_scenario_component_repurpose,
     run_scenario_closed_loop_recycling,
-    run_scenario_component_repurpose,
-    run_scenario_closed_loop_recycling,
     run_scenario_open_loop_recycling,
     run_scenario_landfill
 )
 from .logging_conf import setup_logging
+from .visualization import Visualizer  # NEW
 from .models import IGUCondition
 
 logger = logging.getLogger(__name__)
@@ -396,6 +395,14 @@ def execute_analysis_batch(
     if not report_df.empty:
         # Show breakdown of mean total emissions by scenario
         print(report_df.groupby("Scenario")[["Total Emissions (kgCO2e)", "Final Yield (%)"]].mean())
+    
+    # --- VISUALIZATION (BATCH) ---
+    try:
+        vis = Visualizer(mode="batch_run")
+        vis.plot_batch_summary(report_df)
+        print(f"\nCharts saved to: {vis.session_dir}")
+    except Exception as e:
+        logger.error(f"Batch visualization failed: {e}")
 
 
 def main():
@@ -575,19 +582,17 @@ def main():
     viz_choice = prompt_choice("Select option", ["a", "b", "c"], default="c")
     
     if viz_choice == "a":
-        from .visualization import plot_single_scenario
+        # Single Scenario Breakdown
         if 'result' in locals() and result:
-            plot_single_scenario(result)
+            vis = Visualizer(mode="single_run")
+            p_name = group.glazing_type
+            vis.plot_single_scenario_breakdown(result, product_name=f"Manual Config: {p_name}")
+            # print(f"Plot saved to: {vis.session_dir}")
         else:
             print("No result to visualize.")
             
     elif viz_choice == "b":
-        from .visualization import plot_comparison
         print("\nCalculations running for comparisons...")
-        
-        # Prepare for bulk run
-        # We need to run all scenarios non-interactively
-        # We need to manage 'transport.reuse' carefully as it changes per scenario
         
         comparison_results = []
         
@@ -601,36 +606,13 @@ def main():
             ("Straight to Landfill", run_scenario_landfill)
         ]
         
-        # We reuse the initial stats and masses
-        # Reset transport reuse to generic if needed, but specifics are handled inside the loop
-        
         for sc_name, sc_func in all_scenarios:
-            # Create a clean transport config copy to avoid side effects
-            # (Though our scenarios mutate it? Yes, prompt_location mutates transport.reuse)
-            # In non-interactive mode, they assume it's set.
-            
             t_copy = TransportModeConfig(**transport.__dict__)
             
             # Setup Specific Destinations for non-interactive run
-            # For System/Component Reuse/Repurpose: use reuse_dst (prompted earlier)
-            # For Closed-loop: use recycling_dst (prompted earlier)
-            # For Open-loop: use generic reuse_dst (or we should have prompted for recycling?)
-            # In main() we prompted for:
-            #   reuse_dst (for Reuse/Repurpose)
-            #   recycling_dst (for Recycling)
-            #   landfill_dst (for Landfill)
-            
             if sc_name in ["System Reuse", "Component Reuse", "Component Repurpose"]:
                 t_copy.reuse = reuse_dst
-            elif sc_name in ["Closed-loop Recycling"]:
-                t_copy.reuse = recycling_dst
-            elif sc_name in ["Open-loop Recycling"]:
-                 # Open loop typically sends to "processor_to_recycling" config
-                 # which we configured with recycling_dst?
-                 # main() -> processes.route_configs["processor_to_recycling"] uses recycling_dst
-                 # the function run_scenario_open_loop uses the route config directly, 
-                 # and assumes transport.reuse is set if interactive.
-                 # safe to set it.
+            elif sc_name in ["Closed-loop Recycling", "Open-loop Recycling"]:
                  t_copy.reuse = recycling_dst
             elif sc_name == "Straight to Landfill":
                 t_copy.landfill = landfill_dst
@@ -666,7 +648,9 @@ def main():
         print("-" * 80)
         
         # Plot
-        plot_comparison(comparison_results)
+        vis = Visualizer(mode="single_run")
+        p_name = group.glazing_type
+        vis.plot_scenario_comparison(comparison_results, product_name=f"Manual Config: {p_name}")
 
 if __name__ == "__main__":
     main()

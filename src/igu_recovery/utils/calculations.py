@@ -353,7 +353,18 @@ def calculate_material_masses(group: IGUGroup, seal: SealGeometry) -> Dict[str, 
     vols = compute_sealant_volumes(group, seal)
     # Total volume (primary + secondary) for the whole group
     vol_seal_total_m3 = vols["primary_volume_total_m3"] + vols["secondary_volume_total_m3"]
-    mass_sealant_kg = vol_seal_total_m3 * SEALANT_DENSITY_KG_M3
+    
+    # Map Sealant Type to Density Factor
+    # Base density is ~1700 kg/m3 (Polysulfide)
+    density_factor = 1.0
+    stype = group.sealant_type_secondary
+    if stype == "polyurethane":
+        density_factor = 0.85
+    elif stype == "silicone":
+        density_factor = 0.82
+    # polysulfide stays 1.0 (base)
+    
+    mass_sealant_kg = vol_seal_total_m3 * SEALANT_DENSITY_KG_M3 * density_factor
 
     # 3. Spacer Mass
     # Length = Perimeter * Cavities
@@ -364,7 +375,19 @@ def calculate_material_masses(group: IGUGroup, seal: SealGeometry) -> Dict[str, 
         cavities = 2
     
     total_spacer_len_m = perimeter_m * cavities * qty
-    mass_spacer_kg = total_spacer_len_m * SPACER_MASS_PER_M_KG
+    
+    # Map Spacer Material to Linear Weight
+    # Base (Alu) ~0.04 kg/m? Or constant?
+    # SPACER_MASS_PER_M_KG is loaded from constants.
+    weight_factor = 1.0
+    smat = group.spacer_material
+    if smat == "steel":
+        weight_factor = 2.0
+    elif smat == "warm_edge_composite":
+        weight_factor = 0.6
+    # aluminium stays 1.0
+    
+    mass_spacer_kg = total_spacer_len_m * SPACER_MASS_PER_M_KG * weight_factor
 
     return {
         "glass_kg": mass_glass_kg,

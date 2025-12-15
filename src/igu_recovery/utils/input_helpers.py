@@ -494,13 +494,26 @@ def parse_db_row_to_group(
         reuse_allowed=True
     )
 
+    # Detect Lamination
+    # Check name and unit for "44.2", "stadip", "lami", "silence" etc.
+    win_name = str(row.get('win_name', '')).lower()
+    unit_name = str(row.get('Unit', '')).lower()
+    
+    is_laminated = False
+    indicators = ["lami", "stadip", "silence", "44.", "33.", "55.", "66."]
+    if any(i in win_name for i in indicators) or any(i in unit_name for i in indicators):
+        is_laminated = True
+        
+    g_type_outer = "laminated" if is_laminated else "annealed"
+    # Inner might be annealed, but for closed-loop logic, one laminated pane triggers penalty.
+    
     group = IGUGroup(
         quantity=quantity,
         unit_width_mm=width_mm,
         unit_height_mm=height_mm,
         glazing_type=glazing_type, # type: ignore
-        glass_type_outer="annealed", # Default as DB doesn't specify heat treatment per pane clearly enough yet
-        glass_type_inner="annealed",
+        glass_type_outer=g_type_outer, 
+        glass_type_inner="annealed", # Assuming inner is simple for now, unless parsed otherwise
         coating_type=coating_type, # type: ignore
         sealant_type_secondary=sealant_type, # type: ignore
         spacer_material=spacer_material, # type: ignore
