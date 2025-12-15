@@ -1,20 +1,29 @@
 # VITRIFY - IGU Recovery Environmental Impact Prototype
 
-This project calculates and compares the environmental impact (Carbon Emissions in kg CO2e) of various recovery scenarios for Insulating Glass Units (IGUs) removed from buildings. It is designed to help decision-making regarding checking, repairing, repurposing, or recycling used IGUs.
+This project calculates and compares the environmental impact (Carbon Emissions in kg CO2e) of various recovery scenarios for Insulating Glass Units (IGUs) removed from buildings. It provides decision support for Reuse, Repair, Repurposing, and Recycling pathways.
 
 ## Features
 
-- **5 Recovery Scenarios**:
-  - **System Reuse**: Direct reuse of the IGU system (with optional repair).
-  - **Component Reuse**: Disassembly and re-manufacturing of IGU components.
-  - **Component Repurpose**: Repurposing components for other uses (downcycling/upcycling).
-  - **Closed-loop Recycling**: Recycling into new glass (float plant).
-  - **Open-loop Recycling**: Recycling into glasswool or containers.
+- **11 Recovery Paths**: Detailed analysis of variants including:
+  - **System Reuse**: Direct Reuse vs. Reuse w/ Repair.
+  - **Component Reuse**: Disassembly and Reconditioning.
+  - **Component Repurpose**: Light, Medium, and Heavy intensity variants.
+  - **Closed-loop Recycling**: Intact vs. Broken on-site (Float plant quality checks).
+  - **Open-loop Recycling**: Intact vs. Broken on-site (Glasswool/Container outputs).
+  - **Landfill**: Baseline comparison.
   
-- **Yield Tracking**: Tracks mass, area, and unit counts through every step of the process (removal, disassembly, breaking, etc.).
-- **Transport Modeling**: Calculator for transport emissions (Truck/Ferry) with customizable emission factors (EU Legacy vs Z.E. Trucks).
-- **Material Calculations**: Detailed mass and volume calculations for glass, spacers, and sealants (Primary/Secondary).
-- **Modular Architecture**: Organized as a Python package (`igu_recovery`) for maintainability.
+- **Batch Analysis**:
+  - Automatically processes entire product databases (Excel).
+  - Runs **all 11 scenarios** for every product.
+  - Generates comprehensive CSV reports in `reports/`.
+  - Robust error handling and validation.
+
+- **Detailed Reporting**:
+  - **CSV**: KPIs (Yield, Emissions, Mass) and stage-by-stage breakdowns.
+  - **Plots**: Automated generation of emission distribution charts.
+  - **Markdown Breakdowns**: Granular logs for deep-dive analysis.
+
+- **Transport Modeling**: Configurable Truck/Ferry routes with emission factors (DEFRA 2024, Z.E. Trucks, etc.).
 
 ## Installation
 
@@ -24,12 +33,12 @@ This project calculates and compares the environmental impact (Carbon Emissions 
     cd VITRIFY
     ```
 
-2.  **Create and activate a virtual environment** (optional but recommended):
+2.  **Create and activate a virtual environment**:
     ```bash
     python -m venv .venv
     # Windows:
     .venv\Scripts\activate
-    # Unix/MacOS:
+    # Unix:
     source .venv/bin/activate
     ```
 
@@ -40,53 +49,57 @@ This project calculates and compares the environmental impact (Carbon Emissions 
 
 ## Usage
 
-You can run the prototype using the legacy shim script (if you are familiar with the previous version) or directly via the package module.
+The tool has a single entry point that offers both **Interactive (Single Run)** and **Batch (Automated)** modes.
 
-### Option 1: Legacy Shim (Recommended)
-This script sits in `src/` and points to the new package structure.
-
+### Run the Tool
 ```bash
-cd src
-python Recovery_IGU_CO2.py
+python src/Recovery_IGU_CO2.py
+```
+*Or via module:*
+```bash
+python -m src.igu_recovery.main
 ```
 
-### Option 2: Run as Module
-Run the `igu_recovery` package directly from `src/`.
+### Modes
+1.  **Single Run (Interactive)**:
+    - Step-by-step prompts to define a specific IGU and scenario.
+    - ideal for quick checks or sensitivity analysis.
+    - Generates plots and Markdown breakdown for the single run.
 
-```bash
-cd src
-python -m igu_recovery.main
-```
+2.  **Automated Analysis (Batch)**:
+    - Loads the product database from `data/`.
+    - Asks for Global Parameters (Location, Transport assumptions) once.
+    - Iterates through the entire database.
+    - Saves results to `d:\VITRIFY\reports\automated_analysis_report.csv`.
 
 ## Project Structure
 
 ```
 d:\VITRIFY\
 ├── src\
-│   ├── Recovery_IGU_CO2.py      # Shim entry point (legacy support)
-│   ├── logging_config.py        # Shared logging configuration (legacy/shared)
-│   └── igu_recovery\            # Main Package
-│       ├── __init__.py
-│       ├── main.py              # Main orchestrator / entry point logic
-│       ├── constants.py         # Configuration constants and settings
-│       ├── models.py            # Data classes (Location, IGUGroup, etc.)
-│       ├── scenarios.py         # Logic for the 5 recovery scenarios
-│       ├── logging_conf.py      # Logging setup for the package
-│       └── utils\
-│           ├── __init__.py
-│           ├── calculations.py  # Math, distance, and yield calculations
-│           └── input_helpers.py # User prompts and geocoding
-├── requirements.txt
+│   ├── Recovery_IGU_CO2.py      # Entry point
+│   └── igu_recovery\            # Main Code Package
+│       ├── main.py              # Application Logic
+│       ├── scenarios.py         # 11 Path Logic implementations
+│       ├── models.py            # Data Structures
+│       └── utils\               # Helpers & Math
+├── data\                        # Product Database & Parameters
+├── docs\                        # Methodology Documentation
+├── reports\                     # Generated Outputs (CSV, Plots)
+├── tests\                       # Integration & Unit Tests
 └── README.md
 ```
 
-## Development
+## Testing
 
-- **Logging**: The project uses structured logging with `colorama` for console output.
-- **Dependencies**: Key libraries include `requests` (for geocoding) and `colorama`.
+To verify the robustness of the installation:
+```bash
+# Run Unit Tests
+python tests/test_batch_robustness.py
+
+# Run Integration Test (End-to-End Batch)
+python tests/test_integration_batch.py
+```
 
 ## License
-
-This project is licensed under a proprietary license. 
-All rights reserved. Unauthorized copying, modification, distribution, or use of this software is strictly prohibited.
-See the [LICENSE](LICENSE) file for details.
+Proprietary. All rights reserved.
