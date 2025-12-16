@@ -1,5 +1,5 @@
 from math import radians, sin, cos, sqrt, atan2, floor
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Callable, Tuple
 from ..constants import (
     DECIMALS, MASS_PER_M2_SINGLE, MASS_PER_M2_DOUBLE, MASS_PER_M2_TRIPLE,
     STILLAGE_LIFETIME_CYCLES, STILLAGE_MANUFACTURE_KGCO2,
@@ -429,3 +429,88 @@ def compute_igu_mass_totals(
         "remanufactured_mass_kg": remanufactured_mass_kg,
         "avg_mass_per_igu_kg": avg_mass_per_igu_kg,
     }
+
+
+def run_sensitivity_analysis(
+    base_emissions: float,
+    runner_func: Callable[[], float],
+    processes: ProcessSettings,
+    transport: TransportModeConfig
+) -> Dict[str, Tuple[float, float]]:
+    """
+    Run parameter sensitivity analysis by varying key inputs by ±20% (mutating and reverting).
+    Returns a dict: {'Parameter Name': (Low_Value, High_Value)}
+    """
+    results = {}
+    
+    # 1. Helper to run variation
+    def test_var(param_name, current_val, set_cb):
+        if current_val == 0: return # Skip zero values
+        
+        # Low (-20%)
+        low_val = current_val * 0.8
+        set_cb(low_val)
+        low_res = runner_func()
+        
+        # High (+20%)
+        high_val = current_val * 1.2
+        set_cb(high_val)
+        high_res = runner_func()
+        
+        # Revert
+        set_cb(current_val)
+        
+        results[param_name] = (low_res, high_res)
+
+    # --- PARAMETERS TO TEST ---
+    
+    # 1. Truck Distance A (Origin -> Processor)
+    if processes.route_configs and "origin_to_processor" in processes.route_configs:
+        rc = processes.route_configs["origin_to_processor"]
+        base_km = rc.truck_km
+        def set_dist_a(v): rc.truck_km = v
+        test_var("Truck Distance A", base_km, set_dist_a)
+        
+    # 2. Truck Distance B (Processor -> Reuse)
+    if processes.route_configs and "processor_to_reuse" in processes.route_configs:
+        rc = processes.route_configs["processor_to_reuse"]
+        base_km = rc.truck_km
+        def set_dist_b(v): rc.truck_km = v
+        test_var("Truck Distance B", base_km, set_dist_b)
+        
+    # 3. Truck Emission Factor
+    base_ef = transport.emissionfactor_truck
+    def set_ef(v): transport.emissionfactor_truck = v
+    test_var("Truck Emission Factor", base_ef, set_ef)
+    
+    # 4. Process Energy (E_site / Dismantling)
+    base_esite = processes.e_site_kgco2_per_m2
+    def set_esite(v): processes.e_site_kgco2_per_m2 = v
+    test_var("Dismantling (E_site)", base_esite, set_esite)
+    
+    # 5. Yields
+    # Repair Yield (if used, hard to detect usage, but we can set it)
+    # We mutate the specific yields loaded in constants? No, ProcessSettings holds copy?
+    # ProcessSettings has 'split_yield', 'remanufacturing_yield' but mostly constants are used directly in scenarios.
+    # WAIT: Scenarios use constants directly for YIELD_REPAIR etc. 
+    # BUT `run_scenario_system_reuse` uses `YIELD_REPAIR` from generic constants, NOT from `processes`.
+    # This is a limitation. I should check ProcessSettings definition in models.py again.
+    # It seems `ProcessSettings` acts as a config holder but constant values like YIELD_REPAIR are imported from .constants.
+    # TO FIX: The scenarios DO NOT read yields from `processes` object (except split/reman).
+    # Thus, simple mutation of `processes` won't affect YIELD_REPAIR if it's imported from constants.
+    
+    # However, `e_site_kgco2_per_m2` IS in ProcessSettings.
+    # Let's focus on what is in ProcessSettings for now.
+    
+    # 6. Repurpose Intensity (if in repurpose scenario)
+    # processes.repurpose_kgco2_per_m2 (used?)
+    base_repur = processes.repurpose_kgco2_per_m2
+    def set_repur(v): processes.repurpose_kgco2_per_m2 = v
+    test_var("Repurpose Intensity", base_repur, set_repur)
+    
+    # 7. Packaging / Stillage Mass
+    base_stillage = processes.stillage_mass_empty_kg
+    def set_stillage(v): processes.stillage_mass_empty_kg = v
+    test_var("Stillage Mass", base_stillage, set_stillage)
+
+    return results

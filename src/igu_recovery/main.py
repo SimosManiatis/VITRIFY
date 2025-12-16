@@ -21,7 +21,8 @@ from .utils.input_helpers import (
     configure_route
 )
 from .utils.calculations import (
-    aggregate_igu_groups, compute_igu_mass_totals, haversine_km, get_osrm_distance
+    aggregate_igu_groups, compute_igu_mass_totals, haversine_km, get_osrm_distance,
+    run_sensitivity_analysis
 )
 from .scenarios import (
     run_scenario_system_reuse,
@@ -528,7 +529,6 @@ def main():
             # Generate waterfall, donut, and tornado for this result
             vis.plot_waterfall(result, product_name=f"Manual Config: {p_name}")
             vis.plot_donut_stages(result, product_name=f"Manual Config: {p_name}")
-            vis.plot_tornado_sensitivity(result, product_name=f"Manual Config: {p_name}")
             vis.plot_single_scenario_breakdown(result, product_name=f"Manual Config: {p_name}")
             print(f"\nPlots saved to: {vis.session_dir}")
         else:

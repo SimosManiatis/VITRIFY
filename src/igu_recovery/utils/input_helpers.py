@@ -235,17 +235,29 @@ def define_igu_system_from_manual() -> Tuple[IGUGroup, SealGeometry]:
     glazing_type_str = prompt_choice(
         "Glazing type", ["double", "triple", "single"], default="double"
     )
-    glass_outer_str = prompt_choice(
-        "Outer glass type", ["annealed", "tempered", "laminated"], default="annealed"
-    )
-    glass_inner_str = prompt_choice(
-        "Inner glass type", ["annealed", "tempered", "laminated"], default="annealed"
-    )
-    coating_str = prompt_choice(
-        "Coating type",
-        ["none", "hard_lowE", "soft_lowE", "solar_control"],
-        default="none",
-    )
+    if glazing_type_str == "single":
+        glass_outer_str = prompt_choice(
+            "Glass type", ["annealed", "tempered", "laminated"], default="annealed"
+        )
+        coating_str = prompt_choice(
+            "Coating type",
+            ["none", "hard_lowE", "soft_lowE", "solar_control"],
+            default="none",
+        )
+        glass_inner_str = "annealed" # Check models.py if None is allowed, else defaulting to dummy
+    else:
+        glass_outer_str = prompt_choice(
+            "Outer glass type", ["annealed", "tempered", "laminated"], default="annealed"
+        )
+        glass_inner_str = prompt_choice(
+            "Inner glass type", ["annealed", "tempered", "laminated"], default="annealed"
+        )
+        coating_str = prompt_choice(
+            "Coating type",
+            ["none", "hard_lowE", "soft_lowE", "solar_control"],
+            default="none",
+        )
+    
     sealant_str = prompt_choice(
         "Secondary sealant type",
         ["polysulfide", "polyurethane", "silicone", "combination", "combi"],
@@ -274,12 +286,12 @@ def define_igu_system_from_manual() -> Tuple[IGUGroup, SealGeometry]:
 
     elif glazing_type_str == "double":
         outer_th_str = input(style_prompt("Outer pane thickness (mm): ")).strip()
-        inner_th_str = input(style_prompt("Inner pane thickness (mm): ")).strip()
         cavity1_str = input(style_prompt("Cavity thickness (mm): ")).strip()
+        inner_th_str = input(style_prompt("Inner pane thickness (mm): ")).strip()
         try:
             pane_thickness_outer_mm = float(outer_th_str)
-            pane_thickness_inner_mm = float(inner_th_str)
             cavity_thickness_1_mm = float(cavity1_str)
+            pane_thickness_inner_mm = float(inner_th_str)
         except ValueError:
             logger.error("Invalid numeric input for pane or cavity thickness.")
             raise SystemExit(1)
@@ -291,16 +303,16 @@ def define_igu_system_from_manual() -> Tuple[IGUGroup, SealGeometry]:
 
     else:  # glazing_type_str == "triple"
         outer_th_str = input(style_prompt("Outer pane thickness (mm): ")).strip()
-        middle_th_str = input(style_prompt("Centre pane thickness (mm): ")).strip()
-        inner_th_str = input(style_prompt("Inner pane thickness (mm): ")).strip()
         cavity1_str = input(style_prompt("First cavity thickness (mm): ")).strip()
+        middle_th_str = input(style_prompt("Centre pane thickness (mm): ")).strip()
         cavity2_str = input(style_prompt("Second cavity thickness (mm): ")).strip()
+        inner_th_str = input(style_prompt("Inner pane thickness (mm): ")).strip()
         try:
             pane_thickness_outer_mm = float(outer_th_str)
-            thickness_centre_mm = float(middle_th_str)
-            pane_thickness_inner_mm = float(inner_th_str)
             cavity_thickness_1_mm = float(cavity1_str)
+            thickness_centre_mm = float(middle_th_str)
             cavity_thickness_2_mm = float(cavity2_str)
+            pane_thickness_inner_mm = float(inner_th_str)
         except ValueError:
             logger.error("Invalid numeric input for pane or cavity thickness.")
             raise SystemExit(1)
